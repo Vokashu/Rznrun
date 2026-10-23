@@ -1,0 +1,1734 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Охота за Контрактом: Сеул Раш</title>
+    <!-- Telegram Mini App SDK -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@500;700;900&display=swap" rel="stylesheet">
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+        }
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #0b0716;
+            font-family: 'Rubik', sans-serif;
+            touch-action: none;
+        }
+        #app-wrapper {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            max-width: 480px;
+            margin: 0 auto;
+            background: linear-gradient(180deg, #130924 0%, #1e1136 55%, #26173e 100%);
+            box-shadow: 0 0 50px rgba(236, 72, 153, 0.25);
+            overflow: hidden;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        .neon-text {
+            text-shadow: 0 0 10px rgba(244, 114, 182, 0.8), 0 0 22px rgba(219, 39, 119, 0.6);
+        }
+        .gold-glow {
+            box-shadow: 0 0 20px rgba(250, 204, 21, 0.45);
+        }
+        .glass-panel {
+            background: rgba(20, 14, 38, 0.88);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.14);
+        }
+        .btn-arcade {
+            transition: transform 0.12s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.12s ease;
+        }
+        .btn-arcade:active {
+            transform: scale(0.95) translateY(2px);
+        }
+        @keyframes floatSlow {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-6px); }
+        }
+        .animate-float {
+            animation: floatSlow 2.8s ease-in-out infinite;
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center">
+
+<div id="app-wrapper">
+    <!-- Главный игровой Canvas -->
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- Верхний HUD во время игры -->
+    <div id="hud" class="hidden absolute top-0 left-0 right-0 p-3 pointer-events-none flex flex-col gap-2 z-10">
+        <div class="flex items-center justify-between gap-2">
+            <!-- Жизни (Трезвость) -->
+            <div class="glass-panel px-3 py-1.5 rounded-2xl flex items-center gap-1.5 shadow-lg">
+                <span class="text-xs font-bold text-pink-300 uppercase tracking-wider mr-1">Режим:</span>
+                <div id="hearts-container" class="flex items-center gap-1 text-lg">
+                    <span>❤️</span><span>❤️</span><span>❤️</span>
+                </div>
+            </div>
+
+            <!-- Счёт и Комбо -->
+            <div class="glass-panel px-3.5 py-1.5 rounded-2xl flex items-center gap-3 shadow-lg">
+                <div class="text-right">
+                    <div class="text-[10px] text-purple-300 uppercase font-bold leading-none">Очки</div>
+                    <div id="score-display" class="text-lg font-black text-amber-300 leading-tight">0</div>
+                </div>
+                <div id="combo-badge" class="hidden bg-gradient-to-r from-pink-500 to-amber-500 text-white text-xs font-black px-2 py-0.5 rounded-full shadow">
+                    x2
+                </div>
+            </div>
+
+            <!-- Кнопка звука и паузы -->
+            <div class="flex items-center gap-1.5 pointer-events-auto">
+                <button id="btn-sound" class="glass-panel w-10 h-10 rounded-2xl flex items-center justify-center text-lg active:scale-90 transition" title="Звук">
+                    🔊
+                </button>
+                <button id="btn-pause" class="glass-panel w-10 h-10 rounded-2xl flex items-center justify-center text-lg active:scale-90 transition" title="Меню">
+                    ⏸️
+                </button>
+            </div>
+        </div>
+
+        <!-- Счётчики пойманных целей и кнопка Рывка -->
+        <div class="flex items-center justify-between text-xs px-1">
+            <div class="flex items-center gap-2">
+                <span class="glass-panel px-2.5 py-1 rounded-xl text-pink-200 font-bold flex items-center gap-1">
+                    👩‍❤️‍👨 <span id="stat-girls">0</span>
+                </span>
+                <span class="glass-panel px-2.5 py-1 rounded-xl text-amber-200 font-bold flex items-center gap-1">
+                    📋 <span id="stat-contracts">0</span>
+                </span>
+            </div>
+            <div id="drunk-warning" class="hidden bg-red-600/90 text-white px-2.5 py-1 rounded-xl font-bold animate-pulse">
+                🍺 Штормит! Уворачивайся!
+            </div>
+        </div>
+    </div>
+
+    <!-- Кнопка рывка (Dash) внизу справа во время игры -->
+    <div id="dash-controls" class="hidden absolute bottom-5 right-4 z-10 pointer-events-auto">
+        <button id="btn-dash" class="btn-arcade w-16 h-16 rounded-full bg-gradient-to-br from-amber-400 via-orange-500 to-pink-600 text-white font-black shadow-xl border-2 border-white/40 flex flex-col items-center justify-center">
+            <span class="text-xl leading-none">⚡</span>
+            <span class="text-[10px] uppercase tracking-tighter mt-0.5">Рывок</span>
+        </button>
+    </div>
+
+    <!-- Подсказка управления внизу по центру (исчезает через пару секунд) -->
+    <div id="touch-hint" class="hidden absolute bottom-6 left-1/2 -translate-x-1/2 pointer-events-none z-10 glass-panel px-4 py-1.5 rounded-full text-xs text-purple-200 font-medium whitespace-nowrap opacity-80">
+        👆 Води пальцем или стрелками ⬅️ ➡️
+    </div>
+
+    <!-- СТАРТОВОЕ МЕНЮ -->
+    <div id="start-modal" class="absolute inset-0 z-20 flex flex-col justify-between p-5 bg-gradient-to-b from-[#120824]/90 via-[#190d30]/95 to-[#0d061a]/98 overflow-y-auto">
+        <!-- Верхняя шапка -->
+        <div class="flex items-center justify-between">
+            <span class="bg-pink-500/20 border border-pink-400/30 text-pink-300 text-xs font-bold px-3 py-1 rounded-full">
+                🇰🇷 SEOUL RUSH ARCADE
+            </span>
+            <button id="btn-tg-guide" class="text-xs font-bold text-sky-300 bg-sky-500/15 border border-sky-400/30 px-3 py-1 rounded-full hover:bg-sky-500/25 transition">
+                📲 Как запустить в Telegram?
+            </button>
+        </div>
+
+        <!-- Центральный блок с персонажем и названием -->
+        <div class="my-auto py-3 flex flex-col items-center text-center">
+            <!-- Превью персонажа -->
+            <div class="relative w-36 h-40 mb-2 flex items-center justify-center animate-float">
+                <div class="absolute inset-0 bg-gradient-to-tr from-pink-500/30 to-amber-400/30 rounded-full blur-xl"></div>
+                <canvas id="heroPreviewCanvas" width="160" height="180" class="relative z-10 w-36 h-40"></canvas>
+            </div>
+
+            <!-- Загрузка оригинальной картинки пользователя (по желанию) -->
+            <div class="flex items-center gap-2 mb-3">
+                <label for="upload-sprite" class="cursor-pointer text-xs bg-white/10 hover:bg-white/20 text-purple-200 px-3 py-1.5 rounded-xl border border-white/15 transition flex items-center gap-1.5">
+                    <span>🖼️</span> <span id="upload-label-text">Загрузить фото героя с картинки</span>
+                </label>
+                <input id="upload-sprite" type="file" accept="image/*" class="hidden">
+                <button id="btn-reset-sprite" class="hidden text-xs bg-red-500/20 text-red-300 px-2.5 py-1.5 rounded-xl border border-red-400/30">
+                    Сброс
+                </button>
+            </div>
+
+            <h1 class="text-2xl sm:text-3xl font-black text-white tracking-tight neon-text leading-tight">
+                КОНТРАКТ ИЛИ СОДЖУ
+            </h1>
+            <p class="text-xs sm:text-sm text-purple-200/80 mt-1 max-w-xs">
+                Догоняй корейских девушек и контракты на работу, но держись подальше от зелёных бутылок!
+            </p>
+
+            <!-- Правила / легенда -->
+            <div class="w-full glass-panel rounded-2xl p-3 mt-4 text-left space-y-2">
+                <div class="flex items-center justify-between text-xs bg-emerald-500/10 border border-emerald-400/20 rounded-xl p-2">
+                    <div class="flex items-center gap-2.5">
+                        <span class="text-2xl">📋</span>
+                        <div>
+                            <div class="font-bold text-amber-300">Рабочий Контракт (E-7)</div>
+                            <div class="text-[11px] text-purple-200/80">Главная цель! Даёт бонус и комбо</div>
+                        </div>
+                    </div>
+                    <span class="font-black text-emerald-300 text-sm">+25</span>
+                </div>
+
+                <div class="flex items-center justify-between text-xs bg-pink-500/10 border border-pink-400/20 rounded-xl p-2">
+                    <div class="flex items-center gap-2.5">
+                        <span class="text-2xl">👩‍🎤</span>
+                        <div>
+                            <div class="font-bold text-pink-300">Корейская девушка</div>
+                            <div class="text-[11px] text-purple-200/80">Бежит впереди — догоняй её!</div>
+                        </div>
+                    </div>
+                    <span class="font-black text-pink-300 text-sm">+15 ❤️</span>
+                </div>
+
+                <div class="flex items-center justify-between text-xs bg-red-500/10 border border-red-400/20 rounded-xl p-2">
+                    <div class="flex items-center gap-2.5">
+                        <span class="text-2xl">🍾</span>
+                        <div>
+                            <div class="font-bold text-red-300">Соджу, Пиво и Виски</div>
+                            <div class="text-[11px] text-purple-200/80">Отнимают жизнь и мутят экран!</div>
+                        </div>
+                    </div>
+                    <span class="font-black text-red-400 text-sm">-1 ❤️</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Нижняя панель старта -->
+        <div class="space-y-2.5">
+            <div class="flex items-center justify-between text-xs text-purple-300 px-1">
+                <span>🏆 Лучший результат:</span>
+                <span id="best-score-start" class="font-black text-amber-300 text-sm">0</span>
+            </div>
+            <button id="btn-start" class="btn-arcade w-full py-4 rounded-2xl bg-gradient-to-r from-pink-500 via-rose-500 to-amber-500 text-white font-black text-lg tracking-wide shadow-lg gold-glow uppercase">
+                🚀 Начать погоню!
+            </button>
+        </div>
+    </div>
+
+    <!-- ЭКРАН GAME OVER -->
+    <div id="gameover-modal" class="hidden absolute inset-0 z-20 flex flex-col justify-center items-center p-5 bg-[#0e061c]/95 backdrop-blur-md">
+        <div class="w-full max-w-sm glass-panel rounded-3xl p-6 text-center border border-pink-500/30 shadow-2xl">
+            <div class="text-5xl mb-2">🍻😵‍💫</div>
+            <h2 id="gameover-title" class="text-2xl font-black text-white uppercase neon-text">Алкоголь победил!</h2>
+            <p id="gameover-subtitle" class="text-xs text-purple-200/80 mt-1">
+                Слишком много соджу... Контракт уплыл к другому кандидату!
+            </p>
+
+            <!-- Статистика забега -->
+            <div class="grid grid-cols-3 gap-2 my-5">
+                <div class="bg-white/5 rounded-2xl p-2.5 border border-white/10">
+                    <div class="text-[10px] text-purple-300 uppercase">Счёт</div>
+                    <div id="final-score" class="text-xl font-black text-amber-300 mt-0.5">0</div>
+                </div>
+                <div class="bg-white/5 rounded-2xl p-2.5 border border-white/10">
+                    <div class="text-[10px] text-purple-300 uppercase">Девушки</div>
+                    <div id="final-girls" class="text-xl font-black text-pink-400 mt-0.5">0</div>
+                </div>
+                <div class="bg-white/5 rounded-2xl p-2.5 border border-white/10">
+                    <div class="text-[10px] text-purple-300 uppercase">Контракты</div>
+                    <div id="final-contracts" class="text-xl font-black text-emerald-400 mt-0.5">0</div>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-between text-xs bg-amber-400/10 border border-amber-400/30 rounded-xl px-3.5 py-2 mb-5">
+                <span class="text-amber-200 font-medium">🏆 Рекорд:</span>
+                <span id="final-best" class="font-black text-amber-300 text-base">0</span>
+            </div>
+
+            <div class="space-y-2.5">
+                <button id="btn-restart" class="btn-arcade w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-black text-base shadow-lg uppercase">
+                    🔄 Попробовать ещё раз
+                </button>
+                <button id="btn-to-menu" class="btn-arcade w-full py-2.5 rounded-2xl bg-white/10 hover:bg-white/15 text-purple-200 font-bold text-xs uppercase">
+                    🏠 В главное меню
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- МОДАЛКА: КАК ЗАПУСТИТЬ В TELEGRAM -->
+    <div id="tg-modal" class="hidden absolute inset-0 z-30 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+        <div class="w-full max-w-sm glass-panel rounded-3xl p-5 text-left border border-sky-400/30 max-h-[90vh] overflow-y-auto">
+            <div class="flex items-center justify-between mb-3">
+                <h3 class="text-base font-black text-sky-300 flex items-center gap-1.5">
+                    <span>✈️</span> Запуск как Telegram Mini App
+                </h3>
+                <button id="btn-close-tg" class="w-8 h-8 rounded-full bg-white/10 text-white flex items-center justify-center text-sm">✕</button>
+            </div>
+            <div class="text-xs text-purple-100 space-y-3 leading-relaxed">
+                <p class="text-purple-200/90">
+                    Эта игра уже содержит встроенный <b>Telegram WebApp SDK</b> (вибрация при столкновениях, полноэкранный режим и адаптация под тему).
+                </p>
+                <div class="bg-white/5 p-3 rounded-2xl border border-white/10 space-y-2">
+                    <div class="font-bold text-amber-300">Шаг 1. Загрузите файл на бесплатный HTTPS-хостинг</div>
+                    <p class="text-[11px] text-purple-200">
+                        Сохраните этот код как <code class="bg-black/40 px-1.5 py-0.5 rounded text-pink-300">index.html</code> и перетащите папку на <b>app.netlify.com/drop</b>, <b>Vercel</b> или <b>GitHub Pages</b>. Вы получите ссылку вида <code class="text-sky-300">https://my-game.netlify.app</code>.
+                    </p>
+                </div>
+                <div class="bg-white/5 p-3 rounded-2xl border border-white/10 space-y-2">
+                    <div class="font-bold text-amber-300">Шаг 2. Подключите к @BotFather</div>
+                    <p class="text-[11px] text-purple-200">
+                        1. Откройте <b>@BotFather</b> в Telegram.<br>
+                        2. Отправьте команду <code class="bg-black/40 px-1 rounded text-pink-300">/newapp</code> или настройте кнопку меню через <code class="bg-black/40 px-1 rounded text-pink-300">/setmenubutton</code>.<br>
+                        3. Вставьте ваш HTTPS-адрес. Готово!
+                    </p>
+                </div>
+                <div class="bg-emerald-500/10 border border-emerald-400/30 p-2.5 rounded-xl text-[11px] text-emerald-200">
+                    💡 <b>Совет:</b> Если вы хотите использовать именно оригинальный PNG/JPG вашего персонажа, нажмите <i>«Загрузить фото героя»</i> на стартовом экране — игра сама аккуратно уберёт светлый фон!
+                </div>
+            </div>
+            <button id="btn-close-tg-bottom" class="mt-4 w-full py-2.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-white font-bold text-xs uppercase">
+                Понятно, за дело!
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // =========================================================================
+    // 1. ИНИЦИАЛИЗАЦИЯ TELEGRAM MINI APP SDK
+    // =========================================================================
+    const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+    if (tg) {
+        try {
+            tg.ready();
+            tg.expand();
+            if (tg.setHeaderColor) tg.setHeaderColor('#130924');
+            if (tg.setBackgroundColor) tg.setBackgroundColor('#0b0716');
+        } catch (e) {
+            console.warn('Telegram WebApp init warning:', e);
+        }
+    }
+
+    function triggerHaptic(type = 'light') {
+        try {
+            if (tg && tg.HapticFeedback) {
+                if (type === 'error' || type === 'success' || type === 'warning') {
+                    tg.HapticFeedback.notificationOccurred(type);
+                } else {
+                    tg.HapticFeedback.impactOccurred(type);
+                }
+            } else if (navigator.vibrate) {
+                if (type === 'error') navigator.vibrate([60, 40, 80]);
+                else if (type === 'success') navigator.vibrate(35);
+                else navigator.vibrate(15);
+            }
+        } catch (err) {
+            // Игнорируем на устройствах без виброотклика
+        }
+    }
+
+    // =========================================================================
+    // 2. ЗВУКОВОЙ ДВИЖОК (Web Audio API — без внешних MP3)
+    // =========================================================================
+    class SoundManager {
+        constructor() {
+            this.ctx = null;
+            this.muted = false;
+        }
+        init() {
+            if (!this.ctx) {
+                const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                if (AudioCtx) this.ctx = new AudioCtx();
+            }
+            if (this.ctx && this.ctx.state === 'suspended') {
+                this.ctx.resume();
+            }
+        }
+        playCatchGirl() {
+            if (this.muted) return;
+            this.init();
+            if (!this.ctx) return;
+            const now = this.ctx.currentTime;
+            const notes = [523.25, 659.25, 783.99, 1046.5]; // C5, E5, G5, C6
+            notes.forEach((freq, idx) => {
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(freq, now + idx * 0.055);
+                gain.gain.setValueAtTime(0.14, now + idx * 0.055);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.055 + 0.18);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now + idx * 0.055);
+                osc.stop(now + idx * 0.055 + 0.19);
+            });
+        }
+        playCatchContract() {
+            if (this.muted) return;
+            this.init();
+            if (!this.ctx) return;
+            const now = this.ctx.currentTime;
+            const notes = [587.33, 880, 1174.66]; // D5, A5, D6
+            notes.forEach((freq, idx) => {
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, now + idx * 0.07);
+                gain.gain.setValueAtTime(0.18, now + idx * 0.07);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.07 + 0.25);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now + idx * 0.07);
+                osc.stop(now + idx * 0.07 + 0.26);
+            });
+        }
+        playBottleHit() {
+            if (this.muted) return;
+            this.init();
+            if (!this.ctx) return;
+            const now = this.ctx.currentTime;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(190, now);
+            osc.frequency.linearRampToValueAtTime(65, now + 0.32);
+            gain.gain.setValueAtTime(0.22, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.34);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(now);
+            osc.stop(now + 0.35);
+        }
+        playDash() {
+            if (this.muted) return;
+            this.init();
+            if (!this.ctx) return;
+            const now = this.ctx.currentTime;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(240, now);
+            osc.frequency.exponentialRampToValueAtTime(720, now + 0.15);
+            gain.gain.setValueAtTime(0.12, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(now);
+            osc.stop(now + 0.17);
+        }
+    }
+    const sfx = new SoundManager();
+
+    // =========================================================================
+    // 3. ОТРИСОВКА ПЕРСОНАЖА С КАРТИНКИ (И ПОДДЕРЖКА ЗАГРУЗКИ ФОТО)
+    // =========================================================================
+    let customHeroImage = null;
+
+    // Функция автоматического удаления светлого фона при загрузке фото персонажа
+    function processUploadedHeroImage(file) {
+        const reader = new FileReader();
+        reader.onload = function(evt) {
+            const img = new Image();
+            img.onload = function() {
+                const offCanvas = document.createElement('canvas');
+                const maxDim = 320;
+                const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+                offCanvas.width = Math.round(img.width * scale);
+                offCanvas.height = Math.round(img.height * scale);
+                const octx = offCanvas.getContext('2d');
+                octx.drawImage(img, 0, 0, offCanvas.width, offCanvas.height);
+
+                // Удаляем однотонный светлый фон по краям (flood-fill / цветовое расстояние от углов)
+                try {
+                    const imgData = octx.getImageData(0, 0, offCanvas.width, offCanvas.height);
+                    const data = imgData.data;
+                    const bgR = data[0], bgG = data[1], bgB = data[2];
+                    for (let i = 0; i < data.length; i += 4) {
+                        const r = data[i], g = data[i + 1], b = data[i + 2];
+                        const diff = Math.abs(r - bgR) + Math.abs(g - bgG) + Math.abs(b - bgB);
+                        // Если пиксель очень близкий к кремово-белому фону картинки
+                        if (diff < 48 && r > 205 && g > 200 && b > 190) {
+                            data[i + 3] = 0;
+                        }
+                    }
+                    octx.putImageData(imgData, 0, 0);
+                } catch (e) {
+                    console.warn('Background removal skipped:', e);
+                }
+
+                customHeroImage = offCanvas;
+                document.getElementById('upload-label-text').textContent = 'Фото загружено!';
+                document.getElementById('btn-reset-sprite').classList.remove('hidden');
+                try {
+                    localStorage.setItem('seoul_rush_custom_hero', offCanvas.toDataURL('image/png'));
+                } catch (e) {}
+            };
+            img.src = evt.target.result;
+        };
+        reader.readAsDataURL(file);
+    }
+
+    // Проверяем сохранённый спрайт
+    try {
+        const savedSprite = localStorage.getItem('seoul_rush_custom_hero');
+        if (savedSprite) {
+            const img = new Image();
+            img.onload = () => {
+                customHeroImage = img;
+                document.getElementById('upload-label-text').textContent = 'Свой арт активен';
+                document.getElementById('btn-reset-sprite').classList.remove('hidden');
+            };
+            img.src = savedSprite;
+        }
+    } catch (e) {}
+
+    /**
+     * Детальная векторная отрисовка бородатого героя с картинки:
+     * - Короткие тёмные взъерошенные волосы
+     * - Густые сдвинутые брови
+     * - Рыже-каштановые пышные усы и длинная острая борода, загнутая вправо
+     * - Чёрная футболка с небольшими потёртостями/дырочками
+     * - Мощные руки, тёмно-серые укороченные штаны и чёрные сабо/тапки
+     */
+    function drawBeardedHero(ctx, x, y, size, runPhase = 0, tilt = 0, isHurt = false) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(tilt);
+
+        const scale = size / 110;
+        ctx.scale(scale, scale);
+
+        // Тень под ногами
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.38)';
+        ctx.beginPath();
+        ctx.ellipse(0, 48, 34, 9, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        if (customHeroImage) {
+            // Если пользователь загрузил оригинальную картинку — рисуем её с анимацией бега
+            const bob = Math.sin(runPhase * 2) * 3;
+            const aspect = customHeroImage.width / customHeroImage.height;
+            const drawH = 115;
+            const drawW = drawH * aspect;
+            ctx.drawImage(customHeroImage, -drawW / 2, -58 + bob, drawW, drawH);
+            ctx.restore();
+            return;
+        }
+
+        const legSwing = Math.sin(runPhase) * 6;
+        const armSwing = Math.cos(runPhase) * 5;
+        const bodyBob = Math.abs(Math.sin(runPhase)) * -3;
+
+        ctx.translate(0, bodyBob);
+        ctx.lineWidth = 2.6;
+        ctx.strokeStyle = '#181210';
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+
+        // --- 1. НОГИ И ЧЁРНЫЕ ТАПКИ/САБО ---
+        // Левая нога
+        ctx.save();
+        ctx.translate(-12, 22 + legSwing * 0.5);
+        // Голень
+        ctx.fillStyle = '#f3b493';
+        ctx.fillRect(-5, 10, 10, 9);
+        ctx.strokeRect(-5, 10, 10, 9);
+        // Чёрный тапок
+        ctx.fillStyle = '#252629';
+        ctx.beginPath();
+        ctx.roundRect(-10, 16, 19, 10, [6, 6, 4, 4]);
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+
+        // Правая нога
+        ctx.save();
+        ctx.translate(12, 22 - legSwing * 0.5);
+        // Голень
+        ctx.fillStyle = '#f3b493';
+        ctx.fillRect(-5, 10, 10, 9);
+        ctx.strokeRect(-5, 10, 10, 9);
+        // Чёрный тапок
+        ctx.fillStyle = '#252629';
+        ctx.beginPath();
+        ctx.roundRect(-8, 16, 20, 10, [6, 6, 4, 4]);
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+
+        // --- 2. ТЁМНО-СЕРЫЕ ШТАНЫ ---
+        ctx.fillStyle = '#38393c';
+        ctx.beginPath();
+        ctx.moveTo(-21, 8);
+        ctx.lineTo(21, 8);
+        ctx.lineTo(23, 33 - legSwing * 0.4);
+        ctx.lineTo(6, 33 - legSwing * 0.4);
+        ctx.lineTo(0, 21);
+        ctx.lineTo(-6, 33 + legSwing * 0.4);
+        ctx.lineTo(-23, 33 + legSwing * 0.4);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        // --- 3. МУСКУЛИСТЫЕ РУКИ ---
+        // Левая рука
+        ctx.save();
+        ctx.translate(-25, -10 + armSwing * 0.4);
+        ctx.fillStyle = '#f4b694';
+        ctx.beginPath();
+        ctx.roundRect(-11, -2, 14, 28, 7);
+        ctx.fill();
+        ctx.stroke();
+        // Блик на бицепсе
+        ctx.fillStyle = '#fcd2b8';
+        ctx.beginPath();
+        ctx.ellipse(-5, 8, 2.5, 6, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+
+        // Правая рука
+        ctx.save();
+        ctx.translate(25, -10 - armSwing * 0.4);
+        ctx.fillStyle = '#f4b694';
+        ctx.beginPath();
+        ctx.roundRect(-3, -2, 14, 28, 7);
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+
+        // --- 4. ЧЁРНАЯ ФУТБОЛКА С ПОТЁРТОСТЯМИ ---
+        ctx.fillStyle = '#1b1d21';
+        ctx.beginPath();
+        ctx.moveTo(-22, -20);
+        ctx.lineTo(22, -20);
+        ctx.lineTo(32, -7);
+        ctx.lineTo(23, -2);
+        ctx.lineTo(21, 11);
+        ctx.lineTo(-21, 11);
+        ctx.lineTo(-23, -2);
+        ctx.lineTo(-32, -7);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        // Фирменные дырочки на футболке (у ворота и снизу слева, как на арте)
+        ctx.fillStyle = '#e7a482';
+        ctx.beginPath();
+        ctx.ellipse(-6, -13, 3.2, 1.5, 0.3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.ellipse(-11, 6, 3.5, 1.5, -0.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // --- 5. ГОЛОВА И ЛИЦО ---
+        // Уши
+        ctx.fillStyle = '#eea986';
+        ctx.beginPath();
+        ctx.arc(-23, -34, 6, 0, Math.PI * 2);
+        ctx.arc(23, -34, 6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // Овал лица
+        ctx.fillStyle = '#f6bc9b';
+        ctx.beginPath();
+        ctx.roundRect(-22, -58, 44, 41, [16, 16, 14, 14]);
+        ctx.fill();
+        ctx.stroke();
+
+        // Причёска (короткие тёмные взъерошенные волосы)
+        ctx.fillStyle = '#251a16';
+        ctx.beginPath();
+        ctx.moveTo(-23, -36);
+        ctx.lineTo(-25, -48);
+        ctx.lineTo(-19, -58);
+        ctx.lineTo(-14, -64);
+        ctx.lineTo(-6, -62);
+        ctx.lineTo(2, -67);
+        ctx.lineTo(8, -62);
+        ctx.lineTo(18, -65);
+        ctx.lineTo(16, -58);
+        ctx.lineTo(24, -50);
+        ctx.lineTo(23, -36);
+        ctx.quadraticCurveTo(20, -49, 13, -53);
+        ctx.lineTo(0, -49);
+        ctx.lineTo(-13, -53);
+        ctx.quadraticCurveTo(-20, -49, -23, -36);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        // Глаза
+        if (isHurt) {
+            // Прищур при попадании бутылки
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(-14, -40); ctx.lineTo(-5, -35);
+            ctx.moveTo(-5, -40); ctx.lineTo(-14, -35);
+            ctx.moveTo(5, -40); ctx.lineTo(14, -35);
+            ctx.moveTo(14, -40); ctx.lineTo(5, -35);
+            ctx.stroke();
+        } else {
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.ellipse(-10, -37, 5.5, 4.8, 0, 0, Math.PI * 2);
+            ctx.ellipse(10, -37, 5.5, 4.8, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+            // Карие зрачки
+            ctx.fillStyle = '#2c1912';
+            ctx.beginPath();
+            ctx.arc(-9.5, -37, 3, 0, Math.PI * 2);
+            ctx.arc(9.5, -37, 3, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Блики в глазах
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(-10.8, -38.5, 1.2, 0, Math.PI * 2);
+            ctx.arc(8.2, -38.5, 1.2, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // Густые суровые брови
+        ctx.fillStyle = '#201512';
+        ctx.beginPath();
+        ctx.moveTo(-18, -43);
+        ctx.quadraticCurveTo(-11, -48, -3, -41);
+        ctx.lineTo(-4, -38);
+        ctx.quadraticCurveTo(-11, -43, -17, -40);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.moveTo(18, -43);
+        ctx.quadraticCurveTo(11, -48, 3, -41);
+        ctx.lineTo(4, -38);
+        ctx.quadraticCurveTo(11, -43, 17, -40);
+        ctx.closePath();
+        ctx.fill();
+
+        // Выразительный нос
+        ctx.fillStyle = '#eba07c';
+        ctx.beginPath();
+        ctx.arc(0, -30, 4.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // --- 6. ФИРМЕННАЯ РЫЖАЯ БОРОДА С ЗАВИТКОМ ВПРАВО И УСЫ ---
+        const beardWave = Math.sin(runPhase * 1.5) * 2;
+        ctx.fillStyle = '#9e4718'; // Насыщенный рыже-каштановый цвет
+        ctx.beginPath();
+        ctx.moveTo(-13, -23);
+        ctx.quadraticCurveTo(-16, -6, -6, 4);
+        ctx.quadraticCurveTo(4, 14, 24 + beardWave, 9);
+        // Острый кончик бороды, загнутый вправо-вверх
+        ctx.quadraticCurveTo(33 + beardWave, 5, 31 + beardWave, -1);
+        ctx.quadraticCurveTo(25 + beardWave, 3, 17, -4);
+        ctx.quadraticCurveTo(13, -14, 13, -23);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        // Текстурные пряди на бороде
+        ctx.strokeStyle = '#74300d';
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.moveTo(-4, -15);
+        ctx.quadraticCurveTo(0, 2, 16, 4);
+        ctx.moveTo(4, -15);
+        ctx.quadraticCurveTo(8, -2, 22, 3);
+        ctx.stroke();
+
+        // Пышные закрученные усы
+        ctx.strokeStyle = '#181210';
+        ctx.lineWidth = 2.4;
+        ctx.fillStyle = '#b6541e';
+        ctx.beginPath();
+        ctx.moveTo(0, -25);
+        ctx.quadraticCurveTo(-9, -28, -17, -22);
+        ctx.quadraticCurveTo(-21, -20, -19, -25);
+        ctx.quadraticCurveTo(-14, -21, 0, -21);
+        ctx.quadraticCurveTo(14, -21, 19, -25);
+        ctx.quadraticCurveTo(21, -20, 17, -22);
+        ctx.quadraticCurveTo(9, -28, 0, -25);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.restore();
+    }
+
+    // Отрисовка превью героя на стартовом экране
+    const previewCanvas = document.getElementById('heroPreviewCanvas');
+    const previewCtx = previewCanvas.getContext('2d');
+    let previewTick = 0;
+    function renderHeroPreview() {
+        previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+        previewTick += 0.08;
+        drawBeardedHero(previewCtx, 80, 102, 128, previewTick, Math.sin(previewTick * 0.5) * 0.04, false);
+        requestAnimationFrame(renderHeroPreview);
+    }
+    renderHeroPreview();
+
+    // =========================================================================
+    // 4. ОТРИСОВКА ПРЕДМЕТОВ (БУТЫЛКИ, КОРЕЯНКИ, КОНТРАКТЫ, КОФЕ)
+    // =========================================================================
+
+    // Бутылка алкоголя (Соджу, Пиво или Виски)
+    function drawAlcoholBottle(ctx, item) {
+        ctx.save();
+        ctx.translate(item.x, item.y);
+        ctx.rotate(item.angle);
+
+        // Опасное красное свечение вокруг бутылки
+        ctx.fillStyle = 'rgba(239, 68, 68, 0.22)';
+        ctx.beginPath();
+        ctx.arc(0, 0, item.radius * 1.15, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.lineWidth = 2.2;
+        ctx.strokeStyle = '#140f1d';
+
+        if (item.subType === 'soju') {
+            // Знаменитая зелёная бутылка корейского Соджу
+            ctx.fillStyle = '#16a34a';
+            ctx.beginPath();
+            ctx.moveTo(-6, -24);
+            ctx.lineTo(6, -24);
+            ctx.lineTo(7, -11);
+            ctx.quadraticCurveTo(15, -5, 15, 4);
+            ctx.lineTo(15, 22);
+            ctx.quadraticCurveTo(15, 26, 10, 26);
+            ctx.lineTo(-10, 26);
+            ctx.quadraticCurveTo(-15, 26, -15, 22);
+            ctx.lineTo(-15, 4);
+            ctx.quadraticCurveTo(-15, -5, -7, -11);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            // Белая этикетка с надписью 소주
+            ctx.fillStyle = '#f8fafc';
+            ctx.fillRect(-13, 2, 26, 14);
+            ctx.strokeRect(-13, 2, 26, 14);
+
+            ctx.fillStyle = '#dc2626';
+            ctx.font = 'bold 9px Rubik, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('소주', 0, 12);
+
+            // Крышка
+            ctx.fillStyle = '#bbf7d0';
+            ctx.fillRect(-6, -27, 12, 5);
+            ctx.strokeRect(-6, -27, 12, 5);
+        } else if (item.subType === 'beer') {
+            // Коричневая бутылка пива с пеной
+            ctx.fillStyle = '#b45309';
+            ctx.beginPath();
+            ctx.roundRect(-14, -8, 28, 34, 6);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.roundRect(-6, -25, 12, 19, 3);
+            ctx.fill();
+            ctx.stroke();
+
+            // Золотая этикетка
+            ctx.fillStyle = '#facc15';
+            ctx.fillRect(-12, 3, 24, 13);
+            ctx.strokeRect(-12, 3, 24, 13);
+
+            ctx.fillStyle = '#78350f';
+            ctx.font = '900 8px Rubik, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('BEER', 0, 12);
+        } else {
+            // Бутылка крепкого виски
+            ctx.fillStyle = '#d97706';
+            ctx.beginPath();
+            ctx.roundRect(-16, -6, 32, 32, 4);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#78350f';
+            ctx.fillRect(-6, -24, 12, 18);
+            ctx.strokeRect(-6, -24, 12, 18);
+
+            ctx.fillStyle = '#1e1b4b';
+            ctx.fillRect(-13, 2, 26, 14);
+            ctx.fillStyle = '#fbbf24';
+            ctx.font = '900 8px Rubik, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('40°', 0, 12);
+        }
+
+        ctx.restore();
+    }
+
+    // Корейская девушка (милая K-pop/Seoul героиня с сердечками, которую нужно догнать)
+    function drawKoreanGirl(ctx, item, tick) {
+        ctx.save();
+        ctx.translate(item.x, item.y);
+        const bob = Math.sin(tick * 0.15 + item.seed) * 3;
+        ctx.translate(0, bob);
+
+        // Розовое романтичное свечение
+        const grad = ctx.createRadialGradient(0, 0, 5, 0, 0, 34);
+        grad.addColorStop(0, 'rgba(244, 114, 182, 0.55)');
+        grad.addColorStop(1, 'rgba(244, 114, 182, 0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(0, 0, 34, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.lineWidth = 2.2;
+        ctx.strokeStyle = '#1e1024';
+
+        // Длинные блестящие тёмные волосы (задний план)
+        ctx.fillStyle = '#1a1423';
+        ctx.beginPath();
+        ctx.roundRect(-18, -18, 36, 36, 14);
+        ctx.fill();
+        ctx.stroke();
+
+        // Стильный розовый/сиреневый K-pop пиджак/топ
+        ctx.fillStyle = '#ec4899';
+        ctx.beginPath();
+        ctx.moveTo(-14, 10);
+        ctx.lineTo(14, 10);
+        ctx.lineTo(18, 26);
+        ctx.lineTo(-18, 26);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        // Белый воротничок
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.moveTo(-6, 10);
+        ctx.lineTo(0, 18);
+        ctx.lineTo(6, 10);
+        ctx.closePath();
+        ctx.fill();
+
+        // Личико
+        ctx.fillStyle = '#ffe4d6';
+        ctx.beginPath();
+        ctx.arc(0, -4, 14, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // Чёлка и боковые пряди
+        ctx.fillStyle = '#1a1423';
+        ctx.beginPath();
+        ctx.arc(0, -7, 14.5, Math.PI, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // Большие блестящие глаза и румянец
+        ctx.fillStyle = '#fb7185';
+        ctx.beginPath();
+        ctx.arc(-8, -1, 3, 0, Math.PI * 2);
+        ctx.arc(8, -1, 3, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#1f122b';
+        ctx.beginPath();
+        ctx.arc(-6, -4, 2.3, 0, Math.PI * 2);
+        ctx.arc(6, -4, 2.3, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Улыбка
+        ctx.beginPath();
+        ctx.arc(0, -1, 3, 0.15 * Math.PI, 0.85 * Math.PI);
+        ctx.stroke();
+
+        // Сердечко над головой (жест K-heart)
+        ctx.font = '14px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('💖', 15, -16);
+
+        // Подпись
+        ctx.fillStyle = '#fbcfe8';
+        ctx.font = 'bold 9px Rubik, sans-serif';
+        ctx.fillText('ОППА!', 0, 36);
+
+        ctx.restore();
+    }
+
+    // Контракт на работу (Job Offer / Виза в Корею)
+    function drawWorkContract(ctx, item, tick) {
+        ctx.save();
+        ctx.translate(item.x, item.y);
+        ctx.rotate(Math.sin(tick * 0.08 + item.seed) * 0.12);
+
+        // Золотое свечение
+        const grad = ctx.createRadialGradient(0, 0, 4, 0, 0, 36);
+        grad.addColorStop(0, 'rgba(250, 204, 21, 0.6)');
+        grad.addColorStop(1, 'rgba(250, 204, 21, 0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(0, 0, 36, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Лист документа с золотой рамкой
+        ctx.fillStyle = '#fefce8';
+        ctx.strokeStyle = '#ca8a04';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.roundRect(-18, -22, 36, 44, 5);
+        ctx.fill();
+        ctx.stroke();
+
+        // Шапка документа
+        ctx.fillStyle = '#2563eb';
+        ctx.fillRect(-14, -17, 28, 7);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '900 6px Rubik, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('КОНТРАКТ', 0, -12);
+
+        // Строчки текста
+        ctx.strokeStyle = '#94a3b8';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(-12, -5); ctx.lineTo(12, -5);
+        ctx.moveTo(-12, 1);  ctx.lineTo(10, 1);
+        ctx.moveTo(-12, 7);  ctx.lineTo(4, 7);
+        ctx.stroke();
+
+        // Красная корейская печать (Доджан)
+        ctx.fillStyle = '#ef4444';
+        ctx.beginPath();
+        ctx.arc(7, 12, 6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 7px sans-serif';
+        ctx.fillText('합격', 7, 14.5);
+
+        ctx.restore();
+    }
+
+    // Бонус трезвости: Ледяной Американо (лечит +1 жизнь и снимает опьянение)
+    function drawIcedCoffee(ctx, item, tick) {
+        ctx.save();
+        ctx.translate(item.x, item.y);
+        ctx.rotate(Math.sin(tick * 0.1) * 0.1);
+
+        const grad = ctx.createRadialGradient(0, 0, 4, 0, 0, 30);
+        grad.addColorStop(0, 'rgba(56, 189, 248, 0.55)');
+        grad.addColorStop(1, 'rgba(56, 189, 248, 0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(0, 0, 30, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Трубочка
+        ctx.strokeStyle = '#10b981';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(2, -12);
+        ctx.lineTo(7, -24);
+        ctx.stroke();
+
+        // Стаканчик
+        ctx.fillStyle = '#78350f';
+        ctx.strokeStyle = '#e2e8f0';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(-12, -12);
+        ctx.lineTo(12, -12);
+        ctx.lineTo(9, 18);
+        ctx.lineTo(-9, 18);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        // Купольная крышка
+        ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        ctx.beginPath();
+        ctx.arc(0, -12, 12, Math.PI, 0);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#38bdf8';
+        ctx.font = 'bold 8px Rubik, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('+1 ❤️', 0, 29);
+
+        ctx.restore();
+    }
+
+    // =========================================================================
+    // 5. ИГРОВАЯ ЛОГИКА И ДВИЖОК
+    // =========================================================================
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    let W = 400, H = 700;
+    function resizeCanvas() {
+        const wrapper = document.getElementById('app-wrapper');
+        W = wrapper.clientWidth;
+        H = wrapper.clientHeight;
+        canvas.width = W;
+        canvas.height = H;
+        if (player) {
+            player.y = H - 96;
+            player.x = Math.max(40, Math.min(W - 40, player.x));
+        }
+    }
+    window.addEventListener('resize', resizeCanvas);
+
+    // Состояние игры
+    let gameState = 'MENU'; // MENU | PLAYING | PAUSED | GAMEOVER
+    let score = 0;
+    let bestScore = Number(localStorage.getItem('seoul_rush_best') || 0);
+    let girlsCaught = 0;
+    let contractsCaught = 0;
+    let lives = 3;
+    let combo = 1;
+    let comboTimer = 0;
+    let drunkTimer = 0; // Эффект качания экрана после попадания бутылки
+    let hurtTimer = 0;
+    let gameTick = 0;
+    let roadOffset = 0;
+
+    document.getElementById('best-score-start').textContent = bestScore;
+
+    const player = {
+        x: 200,
+        y: 600,
+        targetX: 200,
+        vx: 0,
+        radius: 30,
+        runPhase: 0,
+        dashCooldown: 0,
+        dashBoostTimer: 0
+    };
+
+    let items = [];
+    let particles = [];
+    let floatingTexts = [];
+    let keys = { left: false, right: false };
+
+    // Декоративные неоновые вывески ночного Сеула по краям дороги
+    const neonSigns = [
+        { text: '서울 밤', sub: 'SEOUL', color: '#f472b6', y: 120, side: 'left' },
+        { text: '대박 나자', sub: 'WORK', color: '#38bdf8', y: 310, side: 'right' },
+        { text: '노래방', sub: 'K-POP', color: '#facc15', y: 500, side: 'left' },
+        { text: '사랑해', sub: 'LOVE', color: '#a855f7', y: 660, side: 'right' }
+    ];
+
+    function resetGame() {
+        resizeCanvas();
+        score = 0;
+        girlsCaught = 0;
+        contractsCaught = 0;
+        lives = 3;
+        combo = 1;
+        comboTimer = 0;
+        drunkTimer = 0;
+        hurtTimer = 0;
+        gameTick = 0;
+        items = [];
+        particles = [];
+        floatingTexts = [];
+        player.x = W / 2;
+        player.targetX = W / 2;
+        player.y = H - 96;
+        player.dashCooldown = 0;
+        player.dashBoostTimer = 0;
+        updateHUD();
+    }
+
+    function updateHUD() {
+        document.getElementById('score-display').textContent = score;
+        document.getElementById('stat-girls').textContent = girlsCaught;
+        document.getElementById('stat-contracts').textContent = contractsCaught;
+
+        const heartsEl = document.getElementById('hearts-container');
+        let heartsHTML = '';
+        for (let i = 0; i < 3; i++) {
+            heartsHTML += i < lives ? '<span>❤️</span>' : '<span class="opacity-25">🖤</span>';
+        }
+        heartsEl.innerHTML = heartsHTML;
+
+        const comboBadge = document.getElementById('combo-badge');
+        if (combo > 1) {
+            comboBadge.classList.remove('hidden');
+            comboBadge.textContent = `x${combo}`;
+        } else {
+            comboBadge.classList.add('hidden');
+        }
+
+        const drunkWarn = document.getElementById('drunk-warning');
+        if (drunkTimer > 0) {
+            drunkWarn.classList.remove('hidden');
+        } else {
+            drunkWarn.classList.add('hidden');
+        }
+    }
+
+    function addFloatingText(x, y, text, color = '#ffffff') {
+        floatingTexts.push({
+            x: Math.max(55, Math.min(W - 55, x)),
+            y,
+            text,
+            color,
+            alpha: 1,
+            vy: -2.2
+        });
+    }
+
+    function spawnParticles(x, y, color, count = 12) {
+        for (let i = 0; i < count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = 1.5 + Math.random() * 4.5;
+            particles.push({
+                x,
+                y,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed,
+                radius: 2.5 + Math.random() * 3.5,
+                color,
+                alpha: 1
+            });
+        }
+    }
+
+    function spawnItem() {
+        const difficulty = 1 + Math.min(1.6, score / 450);
+        const margin = 44;
+        const x = margin + Math.random() * (W - margin * 2);
+        const roll = Math.random();
+
+        // 54% — бутылки с алкоголем, 23% — корейские девушки, 19% — контракты, 4% — Айс Американо (+1 жизнь)
+        if (roll < 0.54) {
+            const bottleTypes = ['soju', 'soju', 'beer', 'whiskey'];
+            const subType = bottleTypes[Math.floor(Math.random() * bottleTypes.length)];
+            items.push({
+                type: 'alcohol',
+                subType,
+                x,
+                y: -40,
+                vx: (Math.random() - 0.5) * 1.4,
+                vy: (3.2 + Math.random() * 2.2) * difficulty,
+                angle: (Math.random() - 0.5) * 0.5,
+                vAngle: (Math.random() - 0.5) * 0.09,
+                radius: 22
+            });
+        } else if (roll < 0.77) {
+            // Корейская девушка — убегает чуть в сторону, нужно догнать!
+            items.push({
+                type: 'girl',
+                x,
+                y: -40,
+                vx: (Math.random() < 0.5 ? -1 : 1) * (1.1 + Math.random() * 1.1),
+                vy: (2.6 + Math.random() * 1.3) * Math.min(1.35, difficulty),
+                radius: 26,
+                seed: Math.random() * 10
+            });
+        } else if (roll < 0.96 || lives >= 3) {
+            // Контракт на работу
+            items.push({
+                type: 'contract',
+                x,
+                y: -40,
+                vx: (Math.random() - 0.5) * 1.2,
+                vy: (2.9 + Math.random() * 1.5) * Math.min(1.4, difficulty),
+                radius: 25,
+                seed: Math.random() * 10
+            });
+        } else {
+            // Спасительный ледяной Американо (если потеряна жизнь)
+            items.push({
+                type: 'coffee',
+                x,
+                y: -40,
+                vx: 0,
+                vy: 3.1,
+                radius: 22,
+                seed: 0
+            });
+        }
+    }
+
+    // Выполнение рывка (Dash) — притягивает ближайшие контракты и девушек
+    function triggerDash() {
+        if (gameState !== 'PLAYING' || player.dashCooldown > 0) return;
+        player.dashCooldown = 140; // ~2.3 секунды перезарядка
+        player.dashBoostTimer = 28; // Длительность рывка
+        sfx.playDash();
+        triggerHaptic('medium');
+        spawnParticles(player.x, player.y, '#fbbf24', 14);
+        addFloatingText(player.x, player.y - 48, '⚡ РЫВОК ЗА ОФФЕРОМ!', '#fde047');
+    }
+
+    // =========================================================================
+    // 6. УПРАВЛЕНИЕ (СЕНСОР, МЫШЬ И КЛАВИАТУРА)
+    // =========================================================================
+    let isPointerDown = false;
+
+    function handlePointerMove(clientX) {
+        if (gameState !== 'PLAYING') return;
+        const rect = canvas.getBoundingClientRect();
+        const relX = clientX - rect.left;
+        player.targetX = Math.max(38, Math.min(W - 38, relX));
+    }
+
+    canvas.addEventListener('pointerdown', (e) => {
+        isPointerDown = true;
+        handlePointerMove(e.clientX);
+    });
+    window.addEventListener('pointermove', (e) => {
+        if (isPointerDown) handlePointerMove(e.clientX);
+    });
+    window.addEventListener('pointerup', () => {
+        isPointerDown = false;
+    });
+
+    // Поддержка touch событий напрямую для старых WebView
+    canvas.addEventListener('touchmove', (e) => {
+        if (e.touches && e.touches.length > 0) {
+            handlePointerMove(e.touches[0].clientX);
+        }
+    }, { passive: true });
+
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A' || e.key === 'ф' || e.key === 'Ф') keys.left = true;
+        if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D' || e.key === 'в' || e.key === 'В') keys.right = true;
+        if (e.key === ' ' || e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') triggerDash();
+    });
+    window.addEventListener('keyup', (e) => {
+        if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A' || e.key === 'ф' || e.key === 'Ф') keys.left = false;
+        if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D' || e.key === 'в' || e.key === 'В') keys.right = false;
+    });
+
+    // =========================================================================
+    // 7. ОТРИСОВКА ФОНА НОЧНОГО СЕУЛА И ОСНОВНОЙ ЦИКЛ
+    // =========================================================================
+    function drawSeoulStreetBackground() {
+        // Силуэт башни Намсан и небоскрёбов Сеула вдалеке
+        ctx.fillStyle = '#160b29';
+        ctx.fillRect(0, 0, W, H);
+
+        // Перспектива ночной улицы
+        const roadMargin = 26;
+        ctx.fillStyle = '#1e1333';
+        ctx.fillRect(roadMargin, 0, W - roadMargin * 2, H);
+
+        // Боковые неоновые бордюры
+        ctx.strokeStyle = 'rgba(236, 72, 153, 0.35)';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(roadMargin, 0); ctx.lineTo(roadMargin, H);
+        ctx.moveTo(W - roadMargin, 0); ctx.lineTo(W - roadMargin, H);
+        ctx.stroke();
+
+        // Движущаяся дорожная разметка (создаёт ощущение бега вперёд)
+        const speedMultiplier = player.dashBoostTimer > 0 ? 9 : 4.5;
+        roadOffset = (roadOffset + speedMultiplier) % 80;
+
+        ctx.strokeStyle = 'rgba(168, 85, 247, 0.22)';
+        ctx.lineWidth = 4;
+        ctx.setLineDash([34, 46]);
+        ctx.lineDashOffset = -roadOffset;
+        ctx.beginPath();
+        ctx.moveTo(W / 2, 0);
+        ctx.lineTo(W / 2, H);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Пролетающие мимо неоновые вывески Сеула
+        neonSigns.forEach(sign => {
+            sign.y += speedMultiplier * 0.55;
+            if (sign.y > H + 60) sign.y = -60;
+
+            const sx = sign.side === 'left' ? 8 : W - 52;
+            ctx.save();
+            ctx.fillStyle = 'rgba(15, 10, 30, 0.85)';
+            ctx.strokeStyle = sign.color;
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.roundRect(sx, sign.y, 44, 24, 6);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = sign.color;
+            ctx.font = 'bold 9px Rubik, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(sign.text, sx + 22, sign.y + 15);
+            ctx.restore();
+        });
+    }
+
+    function endGame() {
+        gameState = 'GAMEOVER';
+        triggerHaptic('error');
+        if (score > bestScore) {
+            bestScore = score;
+            try {
+                localStorage.setItem('seoul_rush_best', String(bestScore));
+            } catch (e) {}
+        }
+
+        document.getElementById('hud').classList.add('hidden');
+        document.getElementById('dash-controls').classList.add('hidden');
+        document.getElementById('touch-hint').classList.add('hidden');
+
+        document.getElementById('final-score').textContent = score;
+        document.getElementById('final-girls').textContent = girlsCaught;
+        document.getElementById('final-contracts').textContent = contractsCaught;
+        document.getElementById('final-best').textContent = bestScore;
+        document.getElementById('best-score-start').textContent = bestScore;
+
+        const titleEl = document.getElementById('gameover-title');
+        const subEl = document.getElementById('gameover-subtitle');
+        if (contractsCaught >= 5 || score >= 350) {
+            titleEl.textContent = 'Легенда Сеула! 🔥';
+            subEl.textContent = 'Ты собрал кучу офферов и покорил корейские сердца, пока соджу не сбило с ног!';
+        } else {
+            titleEl.textContent = 'Алкоголь победил!';
+            subEl.textContent = 'Зелёные бутылки соджу оказались коварнее. Уворачивайся резче!';
+        }
+
+        document.getElementById('gameover-modal').classList.remove('hidden');
+    }
+
+    function updateGame() {
+        gameTick++;
+
+        // Скрываем подсказку через 4 секунды после старта
+        if (gameTick === 240) {
+            document.getElementById('touch-hint').classList.add('hidden');
+        }
+
+        // Клавиатурное смещение цели
+        const moveStep = player.dashBoostTimer > 0 ? 11 : 7.5;
+        if (keys.left) player.targetX = Math.max(38, player.targetX - moveStep);
+        if (keys.right) player.targetX = Math.min(W - 38, player.targetX + moveStep);
+
+        // Если персонаж под эффектом алкоголя — управление слегка покачивает
+        let drunkOffset = 0;
+        if (drunkTimer > 0) {
+            drunkTimer--;
+            drunkOffset = Math.sin(gameTick * 0.18) * 3.2;
+            if (drunkTimer === 0) updateHUD();
+        }
+        if (hurtTimer > 0) hurtTimer--;
+
+        // Плавное движение героя к пальцу/курсору
+        const prevX = player.x;
+        const lerpFactor = player.dashBoostTimer > 0 ? 0.35 : 0.22;
+        player.x += (player.targetX - player.x) * lerpFactor + drunkOffset;
+        player.x = Math.max(36, Math.min(W - 36, player.x));
+        player.vx = player.x - prevX;
+        player.runPhase += 0.22 + Math.min(0.25, Math.abs(player.vx) * 0.03);
+
+        // Таймеры рывка и комбо
+        if (player.dashCooldown > 0) player.dashCooldown--;
+        if (player.dashBoostTimer > 0) player.dashBoostTimer--;
+
+        const dashBtn = document.getElementById('btn-dash');
+        if (player.dashCooldown > 0) {
+            dashBtn.style.opacity = '0.45';
+        } else {
+            dashBtn.style.opacity = '1';
+        }
+
+        if (comboTimer > 0) {
+            comboTimer--;
+            if (comboTimer === 0 && combo > 1) {
+                combo = 1;
+                updateHUD();
+            }
+        }
+
+        // Спавн объектов (ускоряется с ростом очков)
+        const spawnInterval = Math.max(24, Math.floor(46 - Math.min(20, score / 35)));
+        if (gameTick % spawnInterval === 0) {
+            spawnItem();
+        }
+
+        // Обновление падающих объектов
+        for (let i = items.length - 1; i >= 0; i--) {
+            const it = items[i];
+            it.x += it.vx;
+            it.y += it.vy;
+
+            // Отскок от бордюров улицы
+            if (it.x < 36 || it.x > W - 36) {
+                it.vx *= -1;
+                it.x = Math.max(36, Math.min(W - 36, it.x));
+            }
+            if (it.type === 'alcohol') {
+                it.angle += it.vAngle;
+            }
+
+            // Во время активного Рывка (⚡) контракты и кореянки притягиваются к герою!
+            if (player.dashBoostTimer > 0 && (it.type === 'girl' || it.type === 'contract') && it.y > H * 0.35) {
+                it.x += (player.x - it.x) * 0.14;
+                it.y += (player.y - it.y) * 0.1;
+            }
+
+            // Проверка столкновения с героем
+            const dx = it.x - player.x;
+            const dy = it.y - (player.y - 6);
+            const dist = Math.hypot(dx, dy);
+
+            if (dist < player.radius + it.radius - 6) {
+                if (it.type === 'alcohol') {
+                    // Столкновение с бутылкой алкоголя!
+                    lives--;
+                    combo = 1;
+                    comboTimer = 0;
+                    drunkTimer = 170;
+                    hurtTimer = 30;
+                    sfx.playBottleHit();
+                    triggerHaptic('error');
+                    spawnParticles(it.x, it.y, '#ef4444', 16);
+
+                    const phrases = ['🍾 Ой, соджу!', '🍺 Никакого алкоголя!', '😵‍💫 Завтра на смену!', '🥃 -1 Режим!'];
+                    const msg = phrases[Math.floor(Math.random() * phrases.length)];
+                    addFloatingText(player.x, player.y - 45, msg, '#f87171');
+                    updateHUD();
+
+                    items.splice(i, 1);
+                    if (lives <= 0) {
+                        endGame();
+                        return;
+                    }
+                    continue;
+                } else if (it.type === 'girl') {
+                    // Догнал корейскую девушку!
+                    girlsCaught++;
+                    const pts = 15 * combo;
+                    score += pts;
+                    combo = Math.min(5, combo + 1);
+                    comboTimer = 210;
+                    sfx.playCatchGirl();
+                    triggerHaptic('success');
+                    spawnParticles(it.x, it.y, '#f472b6', 15);
+
+                    const phrases = [`💖 Оппа! +${pts}`, `👩‍❤️‍👨 Свидание! +${pts}`, `✨ Саранхэ! +${pts}`];
+                    addFloatingText(it.x, it.y - 20, phrases[Math.floor(Math.random() * phrases.length)], '#f9a8d4');
+                    updateHUD();
+                    items.splice(i, 1);
+                    continue;
+                } else if (it.type === 'contract') {
+                    // Поймал рабочий контракт!
+                    contractsCaught++;
+                    const pts = 25 * combo;
+                    score += pts;
+                    combo = Math.min(5, combo + 1);
+                    comboTimer = 230;
+                    sfx.playCatchContract();
+                    triggerHaptic('success');
+                    spawnParticles(it.x, it.y, '#facc15', 18);
+
+                    const phrases = [`💼 Контракт подписан! +${pts}`, `🇰🇷 Виза E-7! +${pts}`, `₩ Оффер наш! +${pts}`];
+                    addFloatingText(it.x, it.y - 20, phrases[Math.floor(Math.random() * phrases.length)], '#fde047');
+                    updateHUD();
+                    items.splice(i, 1);
+                    continue;
+                } else if (it.type === 'coffee') {
+                    // Выпил ледяной Американо — протрезвел и восстановил жизнь
+                    if (lives < 3) lives++;
+                    drunkTimer = 0;
+                    score += 20;
+                    sfx.playCatchContract();
+                    triggerHaptic('success');
+                    spawnParticles(it.x, it.y, '#38bdf8', 14);
+                    addFloatingText(it.x, it.y - 20, '🧊 Айс Американо! +1 ❤️', '#7dd3fc');
+                    updateHUD();
+                    items.splice(i, 1);
+                    continue;
+                }
+            }
+
+            // Удаление за пределами экрана
+            if (it.y > H + 60) {
+                items.splice(i, 1);
+            }
+        }
+
+        // Обновление частиц
+        for (let i = particles.length - 1; i >= 0; i--) {
+            const p = particles[i];
+            p.x += p.vx;
+            p.y += p.vy;
+            p.alpha -= 0.032;
+            if (p.alpha <= 0) particles.splice(i, 1);
+        }
+
+        // Обновление всплывающих надписей
+        for (let i = floatingTexts.length - 1; i >= 0; i--) {
+            const ft = floatingTexts[i];
+            ft.y += ft.vy;
+            ft.alpha -= 0.022;
+            if (ft.alpha <= 0) floatingTexts.splice(i, 1);
+        }
+    }
+
+    function renderGame() {
+        ctx.save();
+
+        // Эффект лёгкого покачивания камеры, если задела бутылка соджу
+        if (drunkTimer > 0 && gameState === 'PLAYING') {
+            const angle = Math.sin(gameTick * 0.12) * 0.028;
+            ctx.translate(W / 2, H / 2);
+            ctx.rotate(angle);
+            ctx.translate(-W / 2, -H / 2);
+        }
+
+        drawSeoulStreetBackground();
+
+        // Отрисовка всех падающих предметов
+        items.forEach(it => {
+            if (it.type === 'alcohol') drawAlcoholBottle(ctx, it);
+            else if (it.type === 'girl') drawKoreanGirl(ctx, it, gameTick);
+            else if (it.type === 'contract') drawWorkContract(ctx, it, gameTick);
+            else if (it.type === 'coffee') drawIcedCoffee(ctx, it, gameTick);
+        });
+
+        // Аура при активном Рывке
+        if (player.dashBoostTimer > 0) {
+            ctx.save();
+            ctx.strokeStyle = 'rgba(250, 204, 21, 0.7)';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(player.x, player.y - 6, 48, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        // Отрисовка главного бородатого героя
+        const tilt = Math.max(-0.22, Math.min(0.22, player.vx * 0.02));
+        drawBeardedHero(ctx, player.x, player.y, 102, player.runPhase, tilt, hurtTimer > 0);
+
+        // Отрисовка частиц
+        particles.forEach(p => {
+            ctx.save();
+            ctx.globalAlpha = Math.max(0, p.alpha);
+            ctx.fillStyle = p.color;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        });
+
+        // Отрисовка всплывающих фраз
+        floatingTexts.forEach(ft => {
+            ctx.save();
+            ctx.globalAlpha = Math.max(0, ft.alpha);
+            ctx.font = '900 14px Rubik, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.strokeStyle = '#090414';
+            ctx.lineWidth = 4;
+            ctx.strokeText(ft.text, ft.x, ft.y);
+            ctx.fillStyle = ft.color;
+            ctx.fillText(ft.text, ft.x, ft.y);
+            ctx.restore();
+        });
+
+        ctx.restore();
+    }
+
+    function gameLoop() {
+        if (gameState === 'PLAYING') {
+            updateGame();
+        }
+        renderGame();
+        requestAnimationFrame(gameLoop);
+    }
+
+    // =========================================================================
+    // 8. ОБРАБОТЧИКИ КНОПОК ИНТЕРФЕЙСА
+    // =========================================================================
+    function startNewRun() {
+        sfx.init();
+        triggerHaptic('medium');
+        resetGame();
+        gameState = 'PLAYING';
+        document.getElementById('start-modal').classList.add('hidden');
+        document.getElementById('gameover-modal').classList.add('hidden');
+        document.getElementById('hud').classList.remove('hidden');
+        document.getElementById('dash-controls').classList.remove('hidden');
+        document.getElementById('touch-hint').classList.remove('hidden');
+    }
+
+    document.getElementById('btn-start').addEventListener('click', startNewRun);
+    document.getElementById('btn-restart').addEventListener('click', startNewRun);
+
+    document.getElementById('btn-to-menu').addEventListener('click', () => {
+        gameState = 'MENU';
+        document.getElementById('gameover-modal').classList.add('hidden');
+        document.getElementById('hud').classList.add('hidden');
+        document.getElementById('dash-controls').classList.add('hidden');
+        document.getElementById('start-modal').classList.remove('hidden');
+    });
+
+    document.getElementById('btn-pause').addEventListener('click', () => {
+        gameState = 'MENU';
+        document.getElementById('hud').classList.add('hidden');
+        document.getElementById('dash-controls').classList.add('hidden');
+        document.getElementById('start-modal').classList.remove('hidden');
+    });
+
+    document.getElementById('btn-sound').addEventListener('click', (e) => {
+        sfx.muted = !sfx.muted;
+        e.currentTarget.textContent = sfx.muted ? '🔇' : '🔊';
+    });
+
+    document.getElementById('btn-dash').addEventListener('click', (e) => {
+        e.stopPropagation();
+        triggerDash();
+    });
+
+    // Модалка инструкции для Telegram
+    document.getElementById('btn-tg-guide').addEventListener('click', () => {
+        document.getElementById('tg-modal').classList.remove('hidden');
+    });
+    document.getElementById('btn-close-tg').addEventListener('click', () => {
+        document.getElementById('tg-modal').classList.add('hidden');
+    });
+    document.getElementById('btn-close-tg-bottom').addEventListener('click', () => {
+        document.getElementById('tg-modal').classList.add('hidden');
+    });
+
+    // Загрузка пользовательской картинки персонажа
+    document.getElementById('upload-sprite').addEventListener('change', (e) => {
+        if (e.target.files && e.target.files[0]) {
+            processUploadedHeroImage(e.target.files[0]);
+        }
+    });
+    document.getElementById('btn-reset-sprite').addEventListener('click', () => {
+        customHeroImage = null;
+        try { localStorage.removeItem('seoul_rush_custom_hero'); } catch (e) {}
+        document.getElementById('upload-label-text').textContent = 'Загрузить фото героя с картинки';
+        document.getElementById('btn-reset-sprite').classList.add('hidden');
+    });
+
+    window.onload = function() {
+        resizeCanvas();
+        resetGame();
+        gameLoop();
+    };
+</script>
+</body>
+</html>
